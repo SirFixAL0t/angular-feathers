@@ -1,0 +1,21 @@
+{
+  "name": "angular-feathers",
+  "version": "0.1.0",
+  "homepage": "https://github.com/broberson/angular-feathers",
+  "authors": [
+    "Brandon Roberson <broberson@gmail.com>"
+  ],
+  "description": "AngularJS module for interacting with a feathersjs backend over socket.io",
+  "main": "angular-feathers.js",
+  "keywords": [
+    "keywords"
+  ],
+  "license": "MIT",
+  "ignore": [
+    "**/.*",
+    "node_modules",
+    "bower_components",
+    "test",
+    "tests"
+  ]
+}

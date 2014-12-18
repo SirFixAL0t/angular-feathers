@@ -1,0 +1,27 @@
+{
+  "name": "angular-feathers",
+  "version": "0.1.0",
+  "description": "AngularJS module for interacting with a feathersjs backend over socket.io",
+  "main": "angular-feathers.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/broberson/angular-feathers.git"
+  },
+  "keywords": [
+    "angular",
+    "framework",
+    "browser",
+    "client-side",
+    "feathers",
+    "socketio"
+  ],
+  "author": "Brandon Roberson <broberson@gmail.com>",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/broberson/angular-feathers/issues"
+  },
+  "homepage": "https://github.com/broberson/angular-feathers"
+}
