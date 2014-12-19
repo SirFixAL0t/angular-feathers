@@ -7,8 +7,16 @@
   ],
   "description": "AngularJS module for interacting with a feathersjs backend over socket.io",
   "main": "angular-feathers.js",
+  "dependencies": {
+    "socket.io-client": "~1.2.1"
+  },
   "keywords": [
-    "keywords"
+    "angular",
+    "framework",
+    "browser",
+    "client-side",
+    "feathers",
+    "socketio"
   ],
   "license": "MIT",
   "ignore": [
@@ -16,6 +24,7 @@
     "node_modules",
     "bower_components",
     "test",
-    "tests"
+    "tests",
+    "example"
   ]
 }

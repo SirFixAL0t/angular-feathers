@@ -1,0 +1,27 @@
+{
+  "name": "angular-feathers-example",
+  "version": "1.0.0",
+  "description": "Example app",
+  "main": "server.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Brandon Roberson <broberson@gmail.com>",
+  "license": "MIT",
+  "dependencies": {
+    "body-parser": "~1.8.1",
+    "connect-mongo": "^0.4.1",
+    "cookie-parser": "~1.3.3",
+    "express": "~4.9.0",
+    "express-cors": "0.0.3",
+    "feathers": "^1.0.0",
+    "feathers-hooks": "^0.4.0",
+    "feathers-logger": "^0.1.3",
+    "feathers-mongodb": "^0.3.0",
+    "feathers-passport": "^0.1.2",
+    "morgan": "~1.3.0",
+    "passport": "^0.2.1",
+    "passport-local": "^1.0.0",
+    "serve-favicon": "~2.1.3"
+  }
+}
