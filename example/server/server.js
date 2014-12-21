@@ -59,14 +59,14 @@ app
     })
   }))
 
-  // serve favicon requests from the public directory
-  .use(favicon(__dirname + '/public/favicon.ico'))
+  // serve favicon requests from the server directory
+  .use(favicon(__dirname + '/favicon.ico'))
 
-  // serve static files from the public directory
-  .use('/', feathers.static(__dirname + '/public'))
+  // serve static files from the client directory
+  .use('/', feathers.static(__dirname + '/../client'))
 
   // use morgan for logging
-  .configure(logger(morgan('dev', {})))
+  .configure(logger(app.logger = morgan('dev', {})))
 
   // parse JSON and urlencoded request body content
   .use(bodyParser.json())
@@ -76,9 +76,10 @@ app
   .configure(hooks())
 
   // enable cross-origin requests from other ports on localhost
-  .use(cors({
-    allowedOrigins: [ 'http://localhost:*' ]
-  }))
+  // since this is just a demo
+  // .use(cors({
+  //   allowedOrigins: [ 'http://localhost:*' ]
+  // }))
 
   // use feathers-passport for authentication
   .configure(feathersPassport(function(result) {
@@ -115,6 +116,15 @@ app
       json: function() { res.json({ message: 'logged out.' }) }
     })
   })
+  .get('/whoami', function(req, res) {
+    if(!req.user)
+      return res.json({})
+    app.service('users').get(req.user._id, req.feathers, function(err, user) {
+      if(err)
+        res.json(err)
+      res.json(user)
+    })
+  })
 
   // mount the todo service
   .use('/todos', todoService)
@@ -123,4 +133,4 @@ app
   .configure(feathers.errors())
 
 // workaround for a bug in feathers-errors
-app.logger = {}
+// app.logger = {}

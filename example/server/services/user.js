@@ -7,6 +7,8 @@ var hooks = require('feathers-hooks'),
 
 module.exports = function(app) {
 
+  var errors
+
   // has a password with the given salt
   function hash(string, salt) {
     var sha256 = crypto.createHash('sha256')
@@ -32,6 +34,11 @@ module.exports = function(app) {
     if(!hook.params.user)
       return next(new errors.Forbidden('Forbidden.'))
 
+    if(hook.data) {
+      delete hook.data.password
+      delete hook.data.salt
+    }
+
     next()
   }
 
@@ -50,8 +57,6 @@ module.exports = function(app) {
     collection: 'users'
   }).extend({
     authenticate: function(username, password, callback) {
-      var errors = this.app.errors
-
       this.find({ query: { username: username } }, function(error, users) {
         if(error)
           return callback(error)
@@ -69,12 +74,11 @@ module.exports = function(app) {
     },
 
     setup: function(app, path) {
-      var errors = app.errors
+      errors = app.errors
       this.app = app
 
       this.before({
         create: function(hook, next) {
-          console.log('create', hook)
           var salt = crypto.randomBytes(128).toString('base64')
 
           hook.data.password = hash(hook.data.password, salt)
@@ -84,7 +88,10 @@ module.exports = function(app) {
         find: requiresAuth,
         get: requiresAuth,
         update: requiresAuth,
-        patch: requiresAuth,
+        patch: function(hook, next) {
+          console.log('users::patch', hook.data)
+          requiresAuth(hook, next)
+        },
         remove: requiresAuth
       })
 

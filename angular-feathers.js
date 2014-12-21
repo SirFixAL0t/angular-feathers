@@ -1,4 +1,3 @@
-
 (function(window, angular, undefined) {
   /*
     angular-feathers
@@ -27,359 +26,648 @@
 
   var defaults = {
     idProperty: '_id',
-    server: 'http://localhost:3000',
+    server: 'http://localhost:4000',
     socketOptions: {
       forceNew: true
     }
   }
 
+  var imports = {},
+    slice = Array.prototype.slice,
+    push = Array.prototype.push,
+    ownProp = Object.prototype.hasOwnProperty
 
-  function cb(promise, callback) {
-    if(typeof callback == 'function') {
-      promise = promise.then(function(data) {
-        callback(null, data)
-      }, function(err) {
-        callback(err)
+
+  function apply(fn) {
+    var $rootScope = imports.$rootScope || {},
+      phase = $rootScope.$$phase
+
+    if(phase == '$apply' || phase == '$digest') {
+      if(typeof fn == 'function')
+        fn()
+      return
+    }
+
+    if(typeof $rootScope.$apply == 'function')
+      $rootScope.$apply(fn)
+  }
+
+
+  function makeCallback(resolve, reject) {
+    return function(error, results) {
+      if(error)
+        reject(error)
+      else
+        resolve(results)
+    }
+  }
+
+
+
+
+
+// pardon the ascii art, but this makes it easy to
+// find things in Sublime Text
+
+/*
+8888888888                           888    8888888888               d8b 888    888
+888                                  888    888                      Y8P 888    888
+888                                  888    888                          888    888
+8888888   888  888  .d88b.  88888b.  888888 8888888    88888b.d88b.  888 888888 888888 .d88b.  888d888
+888       888  888 d8P  Y8b 888 "88b 888    888        888 "888 "88b 888 888    888   d8P  Y8b 888P"
+888       Y88  88P 88888888 888  888 888    888        888  888  888 888 888    888   88888888 888
+888        Y8bd8P  Y8b.     888  888 Y88b.  888        888  888  888 888 Y88b.  Y88b. Y8b.     888
+8888888888  Y88P    "Y8888  888  888  "Y888 8888888888 888  888  888 888  "Y888  "Y888 "Y8888  888
+*/
+
+  function EventEmitter() {
+  }
+
+  EventEmitter.prototype.on = function(event, handler) {
+    var self = this,
+      listeners = this.$$listeners = this.$$listeners || {},
+      handlers = listeners[event] = listeners[event] || []
+
+    handlers.push(handler)
+
+    return function() { self.off(event, handler) }
+  }
+
+  EventEmitter.prototype.off = function(event, handler) {
+    var listeners = this.$$listeners || {},
+      handlers = listeners[event] || []
+      idx = handlers.indexOf(handler)
+
+    if(~idx)
+      handlers.splice(idx, 1)
+  }
+
+  EventEmitter.prototype.emit = function(/* event, args... */) {
+    var args = slice.call(arguments),
+      event = args.shift(),
+      listeners = this.$$listeners || {},
+      handlers = listeners[event] || [],
+      i = 0,
+      len = handlers.length
+
+    apply(function() {
+      for(; i < len; i++)
+        handlers[i].apply(this, args)
+    })
+  }
+
+
+
+
+
+
+
+/*
+ .d8888b.                    888               888
+d88P  Y88b                   888               888
+Y88b.                        888               888
+ "Y888b.    .d88b.   .d8888b 888  888  .d88b.  888888
+    "Y88b. d88""88b d88P"    888 .88P d8P  Y8b 888
+      "888 888  888 888      888888K  88888888 888
+Y88b  d88P Y88..88P Y88b.    888 "88b Y8b.     Y88b.
+ "Y8888P"   "Y88P"   "Y8888P 888  888  "Y8888   "Y888
+*/
+
+  function Socket(options) {
+    var self = this
+
+    EventEmitter.call(this)
+
+    this.$$options = options
+    this.$$socketEvents = {}
+    this.$$socket = null
+
+    this.isConnected = false
+
+    this.register('connect', function() {
+      apply(function() { self.isConnected = true })
+    })
+    this.register('disconnect', function() {
+      apply(function() { self.isConnected = false })
+    })
+  }
+
+  angular.extend(Socket.prototype, EventEmitter.prototype)
+
+  Socket.prototype.connect = function() {
+
+    var self = this,
+      options = this.$$options,
+      q = imports.$q
+
+    return q(function(resolve, reject) {
+      var events = self.$$socketEvents,
+        socket,
+        event
+
+      if(!self.$$socket) {
+        socket = self.$$socket = io.connect(options.server, options.socketOptions)
+        socket.off = socket.removeListener
+        for(event in events)
+          socket.on(event, events[event].handler)
+      }
+
+      resolve()
+    })
+  }
+
+  Socket.prototype.disconnect = function() {
+    var self = this,
+      q = imports.$q
+
+    return q(function(resolve, reject) {
+      var socket = self.$$socket
+
+      if(socket) {
+        socket.disconnect()
+        socket.destroy()
+        self.$$socket = null
+      }
+
+      resolve()
+    })
+  }
+
+  Socket.prototype.send = function() {
+    var self = this,
+      q = imports.$q,
+      args = slice.call(arguments)
+
+    return q(function(resolve, reject) {
+      if(self.$$socket) {
+        args.push(makeCallback(resolve, reject))
+        self.$$socket.emit.apply(self.$$socket, args)
+      }
+      else {
+        reject(new Error('Unable to send, socket not connected.'))
+      }
+    })
+  }
+
+  Socket.prototype.register = function(event, callback) {
+    var self = this,
+      socket = this.$$socket,
+      events = this.$$socketEvents,
+      register = !events[event],
+      registration = events[event] = events[event] || {
+        count: 0,
+        handler: function() {
+          var args = slice.call(arguments)
+          args.unshift(event)
+          self.emit.apply(self, args)
+        }
+      }
+
+    if(register && socket)
+      socket.on(event, registration.handler)
+
+    registration.count++
+
+    if(typeof callback == 'function')
+      this.on(event, callback)
+
+    return function() {
+      self.unregister(event, callback)
+    }
+  }
+
+  Socket.prototype.unregister = function(event, callback) {
+    var socket = this.$$socket,
+      events = this.$$socketEvents,
+      registration = events[event]
+
+    if(typeof callback == 'function')
+
+    if(registration) {
+      registration.count--
+
+      if(registration.count == 0) {
+        if(socket)
+          socket.off(event, registration.handler)
+        delete events[event]
+      }
+    }
+
+  }
+
+
+
+
+
+
+
+/*
+8888888b.
+888   Y88b
+888    888
+888   d88P .d88b.  .d8888b   .d88b.  888  888 888d888 .d8888b .d88b.
+8888888P" d8P  Y8b 88K      d88""88b 888  888 888P"  d88P"   d8P  Y8b
+888 T88b  88888888 "Y8888b. 888  888 888  888 888    888     88888888
+888  T88b Y8b.          X88 Y88..88P Y88b 888 888    Y88b.   Y8b.
+888   T88b "Y8888   88888P'  "Y88P"   "Y88888 888     "Y8888P "Y8888
+*/
+
+  function Resource(service) {
+    if(this instanceof Resource)
+      throw new Error("Use Resource.create to create new Resource instances, rather than the 'new' keyword.")
+
+    this.$$service = service
+    this.$$options = service.$$options
+    this.$$isResource = true
+    EventEmitter.call(this)
+  }
+
+  angular.extend(Resource.prototype, EventEmitter.prototype)
+
+  Resource.create = function(object, service) {
+    if(object.$$isResource)
+      return object
+
+    Resource.call(object, service)
+    angular.extend(object, Resource.prototype)
+    return object
+  }
+
+  Resource.prototype.toJSON = function() {
+    var object = {},
+      prop
+
+    for(prop in this)
+      if(prop[0] != '$' && ownProp.call(this, prop) && typeof object[prop] != 'function')
+        object[prop] = this[prop]
+
+    return object
+  }
+
+  Resource.prototype.syncFrom = function(object) {
+    var self = this
+
+    apply(function() {
+      var prop
+
+      for(prop in object)
+        if(prop[0] != '$'
+          && ownProp.call(object, prop)
+          && typeof object[prop] != 'function'
+        )
+          self[prop] = object[prop]
+
+      for(prop in self)
+        if(prop[0] != '$'
+          && prop != self.$$options.idProperty
+          && ownProp.call(self, prop)
+          && typeof self[prop] != 'function'
+          && !ownProp.call(object, prop)
+        )
+          delete self[prop]
+    })
+
+    return this
+  }
+
+  Resource.prototype.refresh = function() {
+    return this.$$service.refreshResource(this)
+  }
+
+  Resource.prototype.save = function() {
+    var idProperty = this.$$options.idProperty
+
+    if(this[idProperty])
+      return this.patch()
+
+    return this.create()
+  }
+
+  Resource.prototype.create = function() {
+    return this.$$service.create(this)
+  }
+
+  Resource.prototype.patch = function() {
+    return this.$$service.patch(this)
+  }
+
+  Resource.prototype.destroy = function() {
+    return this.$$service.destroy(this)
+  }
+
+  Resource.prototype.onUpdated = function(resource) {
+    var key = this.$$options.idProperty
+
+    if(resource && resource[key] == this[key])
+      this.emit('updated', this)
+  }
+
+  Resource.prototype.onPatched = function(resource) {
+    var key = this.$$options.idProperty
+
+    if(resource && resource[key] == this[key])
+      this.emit('patched', this)
+  }
+
+  Resource.prototype.onRemoved = function(resource) {
+    var key = this.$$options.idProperty
+
+    if(resource && resource[key] == this[key])
+      this.emit('removed', this)
+  }
+
+
+
+
+
+
+
+
+/*
+ .d8888b.                            d8b
+d88P  Y88b                           Y8P
+Y88b.
+ "Y888b.    .d88b.  888d888 888  888 888  .d8888b .d88b.
+    "Y88b. d8P  Y8b 888P"   888  888 888 d88P"   d8P  Y8b
+      "888 88888888 888     Y88  88P 888 888     88888888
+Y88b  d88P Y8b.     888      Y8bd8P  888 Y88b.   Y8b.
+ "Y8888P"   "Y8888  888       Y88P   888  "Y8888P "Y8888
+ */
+
+  function Service(name, query, feathers) {
+    if(!(this instanceof Array))
+      throw new Error("Use Service.create to create new Service instances, rather than the 'new' keyword.")
+
+    var service = this
+    this.$$feathers = feathers
+    this.$$options = feathers.$$options
+    this.name = name
+    this.query = query || {}
+    EventEmitter.call(this)
+  }
+
+  angular.extend(Service.prototype, EventEmitter.prototype)
+
+  Service.create = function(name, query, feathers) {
+    var service = new Array()
+
+    Service.call(service, name, query, feathers)
+    angular.extend(service, Service.prototype)
+
+    service.on('created', function(object) {
+      service.addOrUpdate(object)
+    })
+    service.on('updated', function(object) {
+      service.addOrUpdate(object).emit('updated')
+    })
+    service.on('patched', function(object) {
+      service.addOrUpdate(object).emit('updated')
+    })
+    service.on('removed', function(object) {
+      service.remove(object).emit('removed')
+    })
+
+    service.$$handlers = ['created', 'updated', 'patched', 'removed'].map(function(event) {
+      return feathers.register(name + ' ' + event, function(object) {
+        service.emit(event, Resource.create(object, service))
       })
-    }
+    })
 
-    return promise
+    feathers.on('connect', function() {
+      if(service.offlineCache) {
+        service.unempty(service.offlineCache)
+        delete service.offlineCache
+      }
+      service.refresh()
+    })
+    feathers.on('disconnect', function() {
+      service.offlineCache = service.empty()
+    })
+
+    feathers.connect()
+
+    return service
+  }
+
+  Service.prototype.indexOf = function(object) {
+    var key = this.$$options.idProperty,
+      i = 0,
+      len = this.length
+
+    if(!ownProp.call(object, key))
+      return -1
+
+    for(; i < len; i++)
+      if(this[i][key] == object[key])
+        return i
+
+    return -1
+  }
+
+  Service.prototype.push = function() {
+    var self = this,
+      args = slice.call(arguments),
+      resources = args.map(function(object) {
+        return Resource.create(object, self)
+      })
+
+    apply(function() {
+      push.apply(self, resources)
+    })
+
+    return this.length
+  }
+
+  Service.prototype.empty = function() {
+    var self = this,
+      removed = []
+
+    apply(function() {
+      while(self.length)
+        removed.unshift(self.pop())
+    })
+
+    return removed
+  }
+
+  Service.prototype.unempty = function(array) {
+    var self = this
+
+    apply(function() {
+      while(array.length)
+        self.unshift(array.pop())
+    })
+
+    return this
+  }
+
+  Service.prototype.addOrUpdate = function(object) {
+    var self = this
+
+    // resource = Resource.create(resource, this)
+
+    apply(function() {
+      var idx = self.indexOf(object)
+
+      if(~idx && self[idx] !== object)
+        object = self[idx].syncFrom(object)
+      else
+        self.push(object)
+    })
+
+    return object
+  }
+
+  Service.prototype.remove = function(resource) {
+    var self = this,
+      idx = this.indexOf(resource)
+
+    if(~idx)
+      apply(function() { resource = self.splice(idx, 1)[0] })
+
+    return resource
+  }
+
+  Service.prototype.get = function(id) {
+    var key = this.$$feathers.$$options.idProperty,
+      filtered = this.filter(function(object) {
+        return object[key] == id
+      })
+
+    return filtered[0] || null
+  }
+
+  Service.prototype.refresh = function(query) {
+    var self = this,
+      socket = this.$$feathers,
+      key = this.$$options.idProperty,
+      query = this.query = query || this.query
+
+    return socket.send(this.name + '::find', query)
+      .then(function(data) {
+        apply(function() {
+          var object, resource,
+            i = 0,
+            len = data.length,
+            toRemove = []
+
+          for(; i < len; i++)
+            self.addOrUpdate(data[i]).emit('updated')
+
+          purge: for(i = 0; i < self.length; i++) {
+            resource = self[i]
+            for(j = 0; j < len; j++) {
+              object = data[j]
+              if(resource[key] == object[key])
+                continue purge
+            }
+            toRemove.push(resource)
+          }
+
+          for(i = 0; i < toRemove.length; i++) {
+            self.remove(toRemove[i])
+            toRemove[i].emit('removed')
+          }
+
+        })
+        return self
+      })
+  }
+
+  Service.prototype.refreshResource = function(resource) {
+    var self = this,
+      key = this.$$options.idProperty,
+      socket = this.$$feathers
+
+    return socket.send(this.name + '::get', resource[key], {})
+      .then(function(data) {
+        self.addOrUpdate(data).emit('updated')
+      })
+  }
+
+  Service.prototype.new = function(object) {
+    return Resource.create(object, this)
+  }
+
+  Service.prototype.create = function(resource) {
+    var self = this,
+      socket = this.$$feathers
+
+    return socket.send(this.name + '::create', resource.toJSON(), {})
+  }
+
+  Service.prototype.patch = function(resource) {
+    var key = this.$$options.idProperty,
+      socket = this.$$feathers,
+      id = resource[key],
+      object = resource.toJSON()
+
+    delete object[key]
+
+    return socket.send(this.name + '::patch', id, object, {})
+  }
+
+  Service.prototype.destroy = function(resource) {
+    var self = this,
+      key = this.$$options.idProperty,
+      socket = this.$$feathers,
+      id = resource[key]
+
+    return socket.send(this.name + '::remove', id, {})
   }
 
 
 
 
-  function resourceFactory(typeName, options) {
-
-    var factory = {
-      find: function(params, callback) {
-        if(typeof callback == 'undefined' && typeof params == 'function') {
-          callback = params
-          params = {}
-        }
-
-        return cb($q(function(resolve, reject) {
-          socket.emit(typeName + '::find', params, function(err, items) {
-            if(err)
-              return reject(err)
-            resolve(items)
-          })
-        }), callback)
-      },
-
-      get: function(id, params, callback) {
-        if(typeof callback == 'undefined' && typeof params == 'function') {
-          callback = params
-          params = {}
-        }
-
-        return cb($q(function(resolve, reject) {
-          socket.emit(typeName + '::get', id, params, function(err, item) {
-            if(err)
-              return reject(err)
-            resolve(item)
-          })
-        }), callback)
-      },
-
-      create: function(data, params, callback) {
-        if(typeof callback == 'undefined' && typeof params == 'function') {
-          callback = params
-          params = {}
-        }
-
-        return cb($q(function(resolve, reject) {
-          socket.emit(typeName + '::create', data, params, function(err, item) {
-            if(err)
-              return reject(err)
-            resolve(item)
-          })
-        }), callback)
-      },
-
-      update: function(id, data, params, callback) {
-        if(typeof callback == 'undefined' && typeof params == 'function') {
-          callback = params
-          params = {}
-        }
-
-        return cb($q(function(resolve, reject) {
-          socket.emit(typeName + '::update', id, data, params, function(err, item) {
-            if(err)
-              return reject(err)
-            resolve(item)
-          })
-        }), callback)
-      },
-
-      patch: function(id, data, params, callback) {
-        if(typeof callback == 'undefined' && typeof params == 'function') {
-          callback = params
-          params = {}
-        }
-
-        return cb($q(function(resolve, reject) {
-          socket.emit(typeName + '::patch', id, data, params, function(err, item) {
-            if(err)
-              return reject(err)
-            resolve(item)
-          })
-        }), callback)
-      },
-
-      remove: function(id, params, callback) {
-        if(typeof callback == 'undefined' && typeof params == 'function') {
-          callback = params
-          params = {}
-        }
-
-        return cb($q(function(resolve, reject) {
-          socket.emit(typeName + '::remove', id, params, function(err, item) {
-            if(err)
-              return reject(err)
-            resolve(item)
-          })
-        }), callback)
-      }
-    }
-
-    function Resource(attrs) {
-      if(!(this instanceof Resource))
-        return new Resource(attrs)
-
-      angular.extend(this, attrs)
-    }
-
-    angular.extend(Resource, {
-      typeName: typeName,
-      factory: factory,
-      cache: []
-
-      reload: function(id) {
-        if(typeof id != 'undefined')
-          return this.factory.get(id)
-        return this.factory.find()
-      },
 
 
-    })
 
-    angular.extend(Resource.prototype, {
-      create: function() {
-
-      },
-
-      update: function() {
-
-      },
-
-      remove: function() {
-
-      }
-    })
-
-    return Resource
+/*
+8888888888                888    888
+888                       888    888
+888                       888    888
+8888888  .d88b.   8888b.  888888 88888b.   .d88b.  888d888 .d8888b
+888     d8P  Y8b     "88b 888    888 "88b d8P  Y8b 888P"   88K
+888     88888888 .d888888 888    888  888 88888888 888     "Y8888b.
+888     Y8b.     888  888 Y88b.  888  888 Y8b.     888          X88
+888      "Y8888  "Y888888  "Y888 888  888  "Y8888  888      88888P'
+*/
+  function Feathers(options) {
+    Socket.call(this, options)
+    this.services = {}
   }
 
-  angular.module('ngFeathers', [ 'ng' ]).provider('$feathers',
-    function() {
-      var config = angular.extend({}, defaults)
+  angular.extend(Feathers.prototype, Socket.prototype)
 
-      this.config = function(options) {
-        if(typeof options == 'object')
-          angular.extend(config, options)
-        return config
-      }
+  Feathers.prototype.service = function(name, query) {
+    var service = this.services[name]
 
-      this.$get = [
-        '$q', '$rootScope',
+    if(!service)
+      service = this.services[name] = Service.create(name, query, this)
+    else if(query)
+      service.refresh(query)
 
-        function($q, $rootScope) {
-
-          function apply(fn) {
-            var phase = $rootScope.$$phase
-
-            if(phase == '$apply' || phase == '$digest') {
-              if(typeof fn == 'function')
-                fn()
-              return
-            }
-
-            $rootScope.$apply(fn)
-          }
-
-
-          function cacheFactory(typeName, sortfn) {
-            var cache = []
-
-            cache.value = function(arr) {
-              if(typeof arr !== 'undefined') {
-                this.splice(0, this.length)
-                for(var i = 0; i < arr.length; i++)
-                  this.push(arr[i])
-                if(typeof sortfn == 'function')
-                  this.sort(sortfn)
-                apply()
-              }
-              return cache
-            }
-
-            cache.empty = function() {
-              this.splice(0, this.length)
-              apply()
-              return this
-            }
-
-            cache.find = function(query) {
-              var matches = [],
-                len = this.length,
-                i = 0,
-                j = 0,
-                item, prop
-
-              itemloop: for(; i < len; i++) {
-                item = this[i]
-
-                for(prop in query) {
-                  if(query.hasOwnProperty(prop))
-                    if(!item.hasProperty(prop) || query[prop] !== item[prop])
-                      break itemloop
-                }
-
-                matches.push(item)
-              }
-
-              return matches
-            }
-
-            cache.indexOfId = function(id) {
-              var len = this.length,
-                i = 0,
-                item
-
-              for(; i < len; i++) {
-                item = this[i]
-                if(item[config.idProperty] == id)
-                  return i
-              }
-
-              return -1
-            }
-
-            cache.get = function(id) {
-              var idx = this.indexOfId(id)
-
-              return idx >= 0 ? this[idx] : undefined
-            }
-
-            cache.insert = function(obj) {
-              if(typeof obj == 'undefined')
-                return
-
-              var idx = this.indexOfId(obj[config.idProperty])
-
-              if(idx >= 0)
-                this[idx] = obj
-              else
-                this.push(obj)
-
-              if(typeof sortfn == 'function')
-                this.sort(sortfn)
-              apply()
-            },
-
-            cache.remove = function(id) {
-              if(typeof id == 'object')
-                id = id[config.idProperty]
-
-              var idx = this.indexOfId(id)
-
-              if(idx >= 0) {
-                this.splice(idx, 1)
-                apply()
-              }
-            }
-          }
-
-
-          function Feathers() {
-            this.socket = null
-            this.listeners = {}
-          }
-
-          angular.extend(Feathers.prototype, {
-
-            connect: function() {
-              this.socket = io.connect(config.server, config.socketOptions)
-              this.socket.off = this.socket.removeListener
-              this.socket.on('connect', this._connected.bind(this))
-              this.socket.on('disconnect', this._disconnected.bind(this))
-            },
-
-            disconnect: function() {
-              if(this.socket) {
-                this.socket.disconnect()
-                this.socket.destroy()
-              }
-              this.socket = null
-            },
-
-            on: function(event, handler) {
-              if(typeof event != 'string')
-                throw new Error('Expected event name to be a string.')
-
-              if(typeof handler != 'function')
-                throw new Error('Expected event handler to be a function.')
-
-              var handlers = this.listeners[event] = this.listeners[event] || []
-
-              handlers.push(handler)
-
-              return function() {
-                this.off(event, handler)
-              }.bind(this)
-            },
-
-            off: function(event, handler) {
-              var handlers = this.listeners[event],
-                idx = handlers ? handlers.indexOf(handler) : -1
-
-              if(idx >= 0)
-                handlers.splice(idx, 1)
-            },
-
-            emit: function(event) {
-              var args = Array.prototype.slice.apply(arguments),
-                handlers = this.listeners[event],
-                len = handlers ? handlers.length : 0,
-                i = 0
-
-              args.shift()
-
-              for(; i < len; i++)
-                handlers[i].apply(this, args)
-            },
-
-            _connected: function() {
-              this.emit('connect')
-            },
-
-            _disconnected: function() {
-              this.emit('disconnect')
-            }
-
-          })
-
-          Feathers.config = angular.extend({}, FeathersProvider.defaults)
-
-          return Feathers
-        }
-      ]
+    return service
+  }
 
 
 
+
+
+
+
+
+
+
+  angular.module('ngFeathers', [ 'ng' ]).provider('Feathers', function() {
+    this.defaults = defaults
+
+    this.$get = function($q, $rootScope) {
+      imports.$q = $q
+      imports.$rootScope = $rootScope
+
+      return window.Feathers = new Feathers(this.defaults)
     }
-  )
-
+  })
 
 })(window, angular)

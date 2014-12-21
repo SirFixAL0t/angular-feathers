@@ -1,0 +1,23 @@
+
+<h3>Users</h3>
+
+<a class="btn btn-default" ui-sref="app.newuser">New User</a>
+<a class="btn btn-default" ng-click="toggleConnection()" class="clickable">{{ connectLink }}</a>
+<a class="btn btn-default" ng-click="justBob()" class="clickable">Just Bob</a>
+<a class="btn btn-default" ng-click="everyone()" class="clickable">Everyone</a>
+
+<table class="table table-bordered table-hover table-striped">
+  <thead>
+    <tr>
+      <th>Username</th>
+      <th>Groups</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr class="clickable" ng-repeat="user in Users | orderBy:'username'" ui-sref='app.user({ id: user._id })'>
+      <td>{{ user.username }}</td>
+      <td>{{ user.groups.join(', ') }}</td>
+    </tr>
+  </tbody>
+</table>
+
