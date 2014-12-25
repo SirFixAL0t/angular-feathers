@@ -88,10 +88,7 @@ module.exports = function(app) {
         find: requiresAuth,
         get: requiresAuth,
         update: requiresAuth,
-        patch: function(hook, next) {
-          console.log('users::patch', hook.data)
-          requiresAuth(hook, next)
-        },
+        patch: requiresAuth,
         remove: requiresAuth
       })
 

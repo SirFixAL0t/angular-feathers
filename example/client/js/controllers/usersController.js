@@ -6,7 +6,7 @@ angular.module('app.controllers').controller('usersController',
       $state.go('app.user', { username: user.username })
     }
 
-    $scope.connectLink = Feathers.isConnected ? 'Disconnect' : 'Connect'
+    $scope.connectLink = 'Connect'
 
     Feathers.on('connect', function() {
       $scope.connectLink = 'Disconnect'

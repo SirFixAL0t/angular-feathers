@@ -4,7 +4,7 @@ var config = {
     name: 'sid',
     secret: 'this is the end of the world as we know it, and i feel fine',
     cookie: {
-      maxAge: 24 * 60* 60 * 1000
+      maxAge: 24 * 60 * 60 * 1000
     },
     resave: false,
     saveUninitialized: true
@@ -119,6 +119,7 @@ app
   .get('/whoami', function(req, res) {
     if(!req.user)
       return res.json({})
+
     app.service('users').get(req.user._id, req.feathers, function(err, user) {
       if(err)
         res.json(err)
