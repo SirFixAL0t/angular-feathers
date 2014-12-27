@@ -334,17 +334,12 @@ Y88b  d88P Y88..88P Y88b.    888 "88b Y8b.     Y88b.
     return this.$$service.refreshResource(this)
   }
 
-  Resource.prototype.save = function() {
-    var idProperty = this.$$options.idProperty
-
-    if(this[idProperty])
-      return this.patch()
-
-    return this.create()
-  }
-
   Resource.prototype.create = function() {
     return this.$$service.create(this)
+  }
+
+  Resource.prototype.update = function() {
+    return this.$$service.update(this)
   }
 
   Resource.prototype.patch = function() {
@@ -415,16 +410,27 @@ Y88b  d88P Y8b.     888      Y8bd8P  888 Y88b.   Y8b.
     angular.extend(service, Service.prototype)
 
     service.on('created', function(object) {
-      service.addOrUpdate(object)
+      object = service.addOrUpdate(object)
+      service.emit('after create', object)
+      service.emit('after get', object)
+      object.emit('created')
     })
     service.on('updated', function(object) {
-      service.addOrUpdate(object).emit('updated')
+      object = service.addOrUpdate(object)
+      service.emit('after update', object)
+      service.emit('after get', object)
+      object.emit('updated')
     })
     service.on('patched', function(object) {
-      service.addOrUpdate(object).emit('updated')
+      object = service.addOrUpdate(object)
+      service.emit('after update', object)
+      service.emit('after get', object)
+      object.emit('updated')
     })
     service.on('removed', function(object) {
-      service.remove(object).emit('removed')
+      object = service.remove(object)
+      service.emit('after remove', object)
+      object.emit('removed')
     })
 
     service.$$handlers = ['created', 'updated', 'patched', 'removed'].map(function(event) {
@@ -551,8 +557,11 @@ Y88b  d88P Y8b.     888      Y8bd8P  888 Y88b.   Y8b.
             len = data.length,
             toRemove = []
 
-          for(; i < len; i++)
-            self.addOrUpdate(data[i]).emit('updated')
+          for(; i < len; i++) {
+            resource = self.addOrUpdate(data[i])
+            self.emit('after get', resource)
+            resource.emit('updated')
+          }
 
           purge: for(i = 0; i < self.length; i++) {
             resource = self[i]
@@ -566,6 +575,7 @@ Y88b  d88P Y8b.     888      Y8bd8P  888 Y88b.   Y8b.
 
           for(i = 0; i < toRemove.length; i++) {
             self.remove(toRemove[i])
+            self.emit('after remove', toRemove[i])
             toRemove[i].emit('removed')
           }
 
@@ -581,7 +591,9 @@ Y88b  d88P Y8b.     888      Y8bd8P  888 Y88b.   Y8b.
 
     return socket.send(this.name + '::get', resource[key], {})
       .then(function(data) {
-        self.addOrUpdate(data).emit('updated')
+        data = self.addOrUpdate(data)
+        self.emit('after get', data)
+        data.emit('updated')
       })
   }
 
@@ -593,15 +605,31 @@ Y88b  d88P Y8b.     888      Y8bd8P  888 Y88b.   Y8b.
     var self = this,
       socket = this.$$feathers
 
+    this.emit('before create', resource)
     return socket.send(this.name + '::create', resource.toJSON(), {})
+  }
+
+  Service.prototype.update = function(resource) {
+    var key = this.$$options.idProperty,
+      socket = this.$$feathers,
+      id = resource[key]
+
+    this.emit('before update', resource)
+
+    var object = resource.toJSON()
+    delete object[key]
+
+    return socket.send(this.name + '::update', id, object, {})
   }
 
   Service.prototype.patch = function(resource) {
     var key = this.$$options.idProperty,
       socket = this.$$feathers,
-      id = resource[key],
-      object = resource.toJSON()
+      id = resource[key]
 
+    this.emit('before update', resource)
+
+    var object = resource.toJSON()
     delete object[key]
 
     return socket.send(this.name + '::patch', id, object, {})
@@ -610,10 +638,45 @@ Y88b  d88P Y8b.     888      Y8bd8P  888 Y88b.   Y8b.
   Service.prototype.destroy = function(resource) {
     var self = this,
       key = this.$$options.idProperty,
-      socket = this.$$feathers,
-      id = resource[key]
+      socket = this.$$feathers
 
-    return socket.send(this.name + '::remove', id, {})
+    this.emit('before remove', resource)
+
+    return socket.send(this.name + '::remove', resource[key], {})
+  }
+
+  // before: create, update, remove
+  Service.prototype.before = function(event, handler) {
+    var prop
+
+    if(typeof event == 'object' && typeof handler == 'undefined') {
+      for(prop in event) {
+        if(hasOwnProperty.call(event, prop) && typeof event[prop] == 'function') {
+          this.before(prop, event[prop])
+        }
+      }
+      return this
+    }
+
+    this.on('before ' + event, handler)
+    return this
+  }
+
+  // after: get, create, update, remove
+  Service.prototype.after = function(event, handler) {
+    var prop
+
+    if(typeof event == 'object' && typeof handler == 'undefined') {
+      for(prop in event) {
+        if(hasOwnProperty.call(event, prop) && typeof event[prop] == 'function') {
+          this.after(prop, event[prop])
+        }
+      }
+      return this
+    }
+
+    this.on('after ' + event, handler)
+    return this
   }
 
 
