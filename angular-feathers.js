@@ -450,7 +450,7 @@ Y88b  d88P Y8b.     888      Y8bd8P  888 Y88b.   Y8b.
       service.offlineCache = service.empty()
     })
 
-    feathers.connect()
+    // feathers.connect()
 
     return service
   }
