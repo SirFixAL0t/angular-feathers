@@ -290,6 +290,7 @@ Y88b  d88P Y88..88P Y88b.    888 "88b Y8b.     Y88b.
 
     Resource.call(object, service)
     angular.extend(object, Resource.prototype)
+    angular.extend(object, service.resourcePrototype)
     return object
   }
 
@@ -398,6 +399,7 @@ Y88b  d88P Y8b.     888      Y8bd8P  888 Y88b.   Y8b.
     this.$$options = feathers.$$options
     this.name = name
     this.query = query || {}
+    this.resourcePrototype = {}
     EventEmitter.call(this)
   }
 
@@ -679,7 +681,9 @@ Y88b  d88P Y8b.     888      Y8bd8P  888 Y88b.   Y8b.
     return this
   }
 
-
+  Service.prototype.extend = function(proto) {
+    angular.extend(this.resourcePrototype, proto)
+  }
 
 
 
