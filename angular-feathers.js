@@ -730,12 +730,12 @@ Y88b  d88P Y8b.     888      Y8bd8P  888 Y88b.   Y8b.
   angular.module('ngFeathers', [ 'ng' ]).provider('Feathers', function() {
     this.defaults = defaults
 
-    this.$get = function($q, $rootScope) {
+    this.$get = ['$q', '$rootScope', function($q, $rootScope) {
       imports.$q = $q
       imports.$rootScope = $rootScope
 
       return window.Feathers = new Feathers(this.defaults)
-    }
+    }]
   })
 
 })(window, angular)
