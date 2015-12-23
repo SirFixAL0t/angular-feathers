@@ -285,6 +285,9 @@ Y88b  d88P Y88..88P Y88b.    888 "88b Y8b.     Y88b.
   angular.extend(Resource.prototype, EventEmitter.prototype)
 
   Resource.create = function(object, service) {
+    if(!object)
+      return;
+
     if(object.$$isResource)
       return object
 
