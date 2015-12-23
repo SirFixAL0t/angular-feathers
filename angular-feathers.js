@@ -462,6 +462,9 @@ Y88b  d88P Y8b.     888      Y8bd8P  888 Y88b.   Y8b.
       i = 0,
       len = this.length
 
+    if(object == null)
+      return -1;
+
     if(!ownProp.call(object, key))
       return -1
 
